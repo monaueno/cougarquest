@@ -28,6 +28,23 @@ import {
 } from '@mui/material';
 import { Directions, Close, Edit, Delete, Add, Image, CheckCircle } from '@mui/icons-material';
 import { getAddressFromCoords } from '../utils/geocode';
+import { parseCoordsFromGoogleMapsLink } from '../utils/parseCoords';
+
+function normalizeQuestLocation(quest: Quest): Quest {
+  const coordsFromLink = parseCoordsFromGoogleMapsLink(quest.googleMapsLink ?? '');
+  return {
+    ...quest,
+    location: {
+      ...(quest.location || {}),
+      address: quest.location?.address ?? '',
+      coordinates: {
+        ...(quest.location?.coordinates || {}),
+        latitude: quest.location?.coordinates?.latitude ?? coordsFromLink?.latitude ?? 0,
+        longitude: quest.location?.coordinates?.longitude ?? coordsFromLink?.longitude ?? 0,
+      }
+    }
+  };
+}
 
 const Quests = () => {
   const [tabValue, setTabValue] = useState(0);
@@ -134,11 +151,11 @@ const Quests = () => {
 
   // Autofill address for editing quest when coordinates change
   useEffect(() => {
-    if (!editingQuest) return;
+    if (!editingQuest?.location?.coordinates) return;
     const coords = editingQuest.location.coordinates;
     if (coords.latitude && coords.longitude) {
       getAddressFromCoords(coords.latitude, coords.longitude).then(address => {
-        if (address && !editingQuest.location.address) {
+        if (address && !editingQuest.location?.address) {
           setEditingQuest(prev => prev ? {
             ...prev,
             location: { ...prev.location, address }
@@ -147,7 +164,7 @@ const Quests = () => {
       });
     }
     // eslint-disable-next-line
-  }, [editingQuest?.location.coordinates.latitude, editingQuest?.location.coordinates.longitude]);
+  }, [editingQuest?.location?.coordinates?.latitude, editingQuest?.location?.coordinates?.longitude]);
 
   // Fetch submitted photo for completed quest
   useEffect(() => {
@@ -441,6 +458,8 @@ const Quests = () => {
         <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={3} maxWidth="800px" margin="0 auto">
           {(tabValue === 0 ? availableQuests : completedQuests).map((quest) => {
             console.log('Rendering quest:', quest);
+            const lat = quest.location?.coordinates?.latitude ?? parseCoordsFromGoogleMapsLink(quest.googleMapsLink)?.latitude;
+            const lng = quest.location?.coordinates?.longitude ?? parseCoordsFromGoogleMapsLink(quest.googleMapsLink)?.longitude;
             return (
               <Box key={quest.id}>
                 <Card 
@@ -552,7 +571,7 @@ const Quests = () => {
                       <IconButton 
                         color="primary"
                         onClick={() => {
-                          setEditingQuest(selectedQuest);
+                          setEditingQuest(normalizeQuestLocation(selectedQuest));
                           setIsEditingQuest(true);
                         }}
                         sx={{ mr: 1 }}
@@ -577,13 +596,13 @@ const Quests = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="subtitle1" color="primary" gutterBottom>
-                    {selectedQuest.location?.address || 'No address available'}
+                    {selectedQuest.location?.address ?? 'No address available'}
                   </Typography>
                   {user?.isAdmin && (
                     <IconButton 
                       size="small" 
                       onClick={() => {
-                        setNewLocation(selectedQuest.location?.address || '');
+                        setNewLocation(selectedQuest.location?.address ?? '');
                         setIsEditingLocation(true);
                       }}
                     >
@@ -723,13 +742,13 @@ const Quests = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <TextField
               label="Title"
-              value={editingQuest?.title || ''}
+              value={editingQuest?.title ?? ''}
               onChange={(e) => setEditingQuest(prev => prev ? { ...prev, title: e.target.value } : null)}
               fullWidth
             />
             <TextField
               label="Description"
-              value={editingQuest?.description || ''}
+              value={editingQuest?.description ?? ''}
               onChange={(e) => setEditingQuest(prev => prev ? { ...prev, description: e.target.value } : null)}
               multiline
               rows={3}
@@ -737,17 +756,55 @@ const Quests = () => {
             />
             <TextField
               label="Address"
-              value={editingQuest?.location?.address || ''}
+              value={editingQuest?.location?.address ?? ''}
               onChange={(e) => setEditingQuest(prev => prev ? { 
                 ...prev, 
-                location: { ...prev.location, address: e.target.value }
+                location: {
+                  ...(prev.location || {}),
+                  address: e.target.value,
+                  coordinates: {
+                    ...(prev.location?.coordinates || {})
+                  }
+                }
+              } : null)}
+              fullWidth
+            />
+            <TextField
+              label="Latitude"
+              value={editingQuest?.location?.coordinates?.latitude ?? parseCoordsFromGoogleMapsLink(editingQuest?.googleMapsLink ?? '')?.latitude ?? ''}
+              onChange={(e) => setEditingQuest(prev => prev ? {
+                ...prev,
+                location: {
+                  ...(prev.location || {}),
+                  address: prev.location?.address ?? '',
+                  coordinates: {
+                    ...(prev.location?.coordinates || {}),
+                    latitude: parseFloat(e.target.value) || 0
+                  }
+                }
+              } : null)}
+              fullWidth
+            />
+            <TextField
+              label="Longitude"
+              value={editingQuest?.location?.coordinates?.longitude ?? parseCoordsFromGoogleMapsLink(editingQuest?.googleMapsLink ?? '')?.longitude ?? ''}
+              onChange={(e) => setEditingQuest(prev => prev ? {
+                ...prev,
+                location: {
+                  ...(prev.location || {}),
+                  address: prev.location?.address ?? '',
+                  coordinates: {
+                    ...(prev.location?.coordinates || {}),
+                    longitude: parseFloat(e.target.value) || 0
+                  }
+                }
               } : null)}
               fullWidth
             />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <TextField
                 label="Photo URL"
-                value={editingQuest?.photoURL || ''}
+                value={editingQuest?.photoURL ?? ''}
                 onChange={(e) => setEditingQuest(prev => prev ? { ...prev, photoURL: e.target.value } : null)}
                 fullWidth
               />
@@ -777,14 +834,30 @@ const Quests = () => {
             )}
             <TextField
               label="Google Maps Link"
-              value={editingQuest?.googleMapsLink || ''}
-              onChange={(e) => setEditingQuest(prev => prev ? { ...prev, googleMapsLink: e.target.value } : null)}
+              value={editingQuest?.googleMapsLink ?? ''}
+              onChange={(e) => {
+                const link = e.target.value;
+                const coords = parseCoordsFromGoogleMapsLink(link);
+                setEditingQuest(prev => prev ? {
+                  ...prev,
+                  googleMapsLink: link,
+                  location: {
+                    ...(prev.location || {}),
+                    address: prev.location?.address ?? '',
+                    coordinates: {
+                      ...(prev.location?.coordinates || {}),
+                      latitude: coords?.latitude ?? prev.location?.coordinates?.latitude ?? 0,
+                      longitude: coords?.longitude ?? prev.location?.coordinates?.longitude ?? 0,
+                    }
+                  }
+                } : null);
+              }}
               fullWidth
             />
             <TextField
               label="Points"
               type="number"
-              value={editingQuest?.points || 0}
+              value={editingQuest?.points ?? 0}
               onChange={(e) => setEditingQuest(prev => prev ? { ...prev, points: parseInt(e.target.value) || 0 } : null)}
               fullWidth
             />
