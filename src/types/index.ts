@@ -14,10 +14,12 @@ export interface Quest {
   completedBy: string[];
   googleMapsLink: string;
   mapsLink?: string; // Keep the old field as optional for backward compatibility
+  createdAt: string; // ISO string timestamp
 }
 
 export interface User {
   id: string;
+  name: string; // Non-nullable name for leaderboard
   displayName: string | null;
   email: string | null;
   photoURL: string | null;
@@ -25,6 +27,8 @@ export interface User {
   isAdmin: boolean;
   sons: string[];
   completedQuests: string[];
+  teamName?: string; // Optional custom team name
+  grandpa?: string; // Optional grandpa name
 }
 
 export interface LeaderboardEntry {

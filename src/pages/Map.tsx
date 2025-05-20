@@ -11,9 +11,27 @@ const GOOGLE_MAPS_API_KEY = 'AIzaSyDkKwVbdR2ysG2g4SVSFL1T-I1VGt7zV1o';
 const Map = () => {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<google.maps.Map | null>(null);
   const { user } = useAuth();
+
+  useEffect(() => {
+    // Get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        () => {
+          setUserLocation(null);
+        }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const fetchQuests = async () => {
@@ -56,21 +74,43 @@ const Map = () => {
       initializeMap();
     }
     // eslint-disable-next-line
-  }, [loading, quests, user]);
+  }, [loading, quests, user, userLocation]);
 
   const initializeMap = () => {
     if (!mapRef.current) return;
+    const defaultCenter = userLocation || { lat: 40.2518, lng: -111.6493 };
     mapInstance.current = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 40.2518, lng: -111.6493 }, // BYU coordinates
+      center: defaultCenter,
       zoom: 15,
     });
+
+    // Add user location marker (blue dot)
+    if (userLocation) {
+      new window.google.maps.Marker({
+        position: userLocation,
+        map: mapInstance.current!,
+        title: 'Your Location',
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#1976D2',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+        },
+      });
+    }
 
     // Only show markers for quests the user has not completed
     quests
       .filter(quest => !quest.completedBy?.includes(user?.id))
       .forEach(quest => {
-        let lat = quest.location?.coordinates?.latitude;
-        let lng = quest.location?.coordinates?.longitude;
+        let lat: number | undefined;
+        let lng: number | undefined;
+        if (quest.location && quest.location.coordinates) {
+          lat = quest.location.coordinates.latitude;
+          lng = quest.location.coordinates.longitude;
+        }
         if ((lat === undefined || lng === undefined) && quest.googleMapsLink) {
           const coords = parseCoordsFromGoogleMapsLink(quest.googleMapsLink);
           if (coords) {
@@ -79,15 +119,31 @@ const Map = () => {
           }
         }
         if (lat === undefined || lng === undefined) return;
+
+        // Classic teardrop pin in BYU royal blue with a white 'Y' positioned higher
+        const pinSvg = `
+          <svg width="32" height="48" viewBox="0 0 32 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2C9.373 2 4 7.373 4 14c0 7.732 8.5 20.5 11.2 24.4a2 2 0 0 0 3.6 0C19.5 34.5 28 21.732 28 14c0-6.627-5.373-12-12-12z" fill="#0062B8"/>
+            <circle cx="16" cy="16" r="8" fill="#0062B8"/>
+            <text x="16" y="15" text-anchor="middle" font-size="14" font-family="Arial Black,Arial,sans-serif" font-weight="bold" fill="#fff" dy="0.35em">Y</text>
+          </svg>
+        `;
+        const icon = {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(pinSvg),
+          scaledSize: new window.google.maps.Size(32, 48),
+          anchor: new window.google.maps.Point(16, 48),
+        };
+
         const marker = new window.google.maps.Marker({
           position: { lat, lng },
           map: mapInstance.current!,
           title: quest.title,
+          icon,
         });
         const infoWindow = new window.google.maps.InfoWindow({
           content: `
             <div style="text-align:center;max-width:220px;">
-              <img src="${quest.photoURL}" alt="${quest.title}" style="width:200px;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;" />
+              <img src="${quest.photoURL || ''}" alt="${quest.title}" style="width:200px;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;" />
               <h3>${quest.title}</h3>
               <p>${quest.description}</p>
               <p>Points: ${quest.points}</p>

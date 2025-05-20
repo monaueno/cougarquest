@@ -30,6 +30,7 @@ const Login = () => {
       // Create or update user document
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
+        name: user.displayName || user.phoneNumber || 'Anonymous User',
         displayName: user.displayName,
         email: user.email,
         photoURL: user.photoURL,
@@ -63,6 +64,7 @@ const Login = () => {
       // Create or update user document
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
+        name: user.phoneNumber || 'Anonymous User',
         displayName: user.phoneNumber,
         email: null,
         photoURL: null,

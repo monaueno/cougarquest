@@ -231,25 +231,43 @@ const Quests = () => {
       await uploadBytes(storageRef, selectedFile);
       const downloadURL = await getDownloadURL(storageRef);
 
+      // Get the quest to get its points value and creation time
+      const quest = availableQuests.find(q => q.id === completingQuestId);
+      if (!quest) throw new Error('Quest not found');
+
+      // Calculate points based on completion time
+      const questCreationTime = new Date(quest.createdAt);
+      const completionTime = new Date();
+      const hoursSinceCreation = (completionTime.getTime() - questCreationTime.getTime()) / (1000 * 60 * 60);
+      const points = hoursSinceCreation <= 12 ? 10 : 5;
+
       // Save submission in Firestore
       await setDoc(firestoreDoc(db, 'questSubmissions', `${user.id}_${completingQuestId}`), {
         userId: user.id,
         questId: completingQuestId,
         photoURL: downloadURL,
-        submittedAt: new Date().toISOString(),
+        submittedAt: completionTime.toISOString(),
+        points: points
       });
 
       // Mark quest as completed for the user
       const questRef = doc(db, 'quests', completingQuestId);
       await updateDoc(questRef, {
-        completedBy: [...(availableQuests.find(q => q.id === completingQuestId)?.completedBy || []), user.id]
+        completedBy: [...(quest.completedBy || []), user.id]
+      });
+
+      // Update user's points
+      const userRef = doc(db, 'users', user.id);
+      await updateDoc(userRef, {
+        points: (user.points || 0) + points,
+        completedQuests: [...(user.completedQuests || []), completingQuestId]
       });
 
       // Update local state
       setAvailableQuests(prev => prev.filter(q => q.id !== completingQuestId));
       setCompletedQuests(prev => [
         ...prev,
-        availableQuests.find(q => q.id === completingQuestId) as Quest
+        quest
       ]);
       // Update selectedQuest if it's the one just completed
       setSelectedQuest(prev => {
@@ -369,14 +387,16 @@ const Quests = () => {
       const questRef = collection(db, 'quests');
       const docRef = await addDoc(questRef, {
         ...newQuest,
-        completedBy: []
+        completedBy: [],
+        createdAt: new Date().toISOString()
       });
       
       // Update local state
       const createdQuest = {
         id: docRef.id,
         ...newQuest,
-        completedBy: []
+        completedBy: [],
+        createdAt: new Date().toISOString()
       } as Quest;
       
       setAvailableQuests(prev => [...prev, createdQuest]);
