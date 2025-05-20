@@ -41,19 +41,25 @@ const Profile = () => {
   const [editingSonIndex, setEditingSonIndex] = useState<number | null>(null);
   const [editingSonName, setEditingSonName] = useState('');
   const [savingSon, setSavingSon] = useState(false);
+  const [localSons, setLocalSons] = useState<string[]>(user?.sons || []);
+  const [localGrandpa, setLocalGrandpa] = useState<string>(user?.grandpa || '');
+  const [localTeamName, setLocalTeamName] = useState<string>(user?.teamName || '');
 
   useEffect(() => {
     setTeamName(user?.teamName || '');
+    setLocalTeamName(user?.teamName || '');
     setGrandpa(user?.grandpa || '');
-  }, [user?.teamName, user?.grandpa]);
+    setLocalGrandpa(user?.grandpa || '');
+    setLocalSons(user?.sons || []);
+  }, [user?.teamName, user?.grandpa, user?.sons]);
 
   const handleAddSon = async () => {
     if (!user || !newSonName.trim()) return;
-
     try {
       await updateDoc(doc(db, 'users', user.id), {
         sons: arrayUnion(newSonName.trim()),
       });
+      setLocalSons(prev => [...prev, newSonName.trim()]);
       setNewSonName('');
       setOpenDialog(false);
     } catch (error) {
@@ -63,11 +69,11 @@ const Profile = () => {
 
   const handleRemoveSon = async (sonName: string) => {
     if (!user) return;
-
     try {
       await updateDoc(doc(db, 'users', user.id), {
         sons: arrayRemove(sonName),
       });
+      setLocalSons(prev => prev.filter(s => s !== sonName));
     } catch (error) {
       console.error('Error removing son:', error);
     }
@@ -89,10 +95,12 @@ const Profile = () => {
       await updateDoc(doc(db, 'users', user.id), {
         teamName: teamName.trim() || null,
       });
+      setLocalTeamName(teamName.trim());
     } catch (error) {
       console.error('Error saving team name:', error);
     } finally {
       setSavingTeamName(false);
+      setEditingTeamName(false);
     }
   };
 
@@ -103,6 +111,7 @@ const Profile = () => {
       await updateDoc(doc(db, 'users', user.id), {
         grandpa: grandpa.trim() || null,
       });
+      setLocalGrandpa(grandpa.trim());
     } catch (error) {
       console.error('Error saving grandpa:', error);
     } finally {
@@ -118,7 +127,7 @@ const Profile = () => {
       await updateDoc(doc(db, 'users', user.id), {
         grandpa: null,
       });
-      setGrandpa('');
+      setLocalGrandpa('');
     } catch (error) {
       console.error('Error removing grandpa:', error);
     } finally {
@@ -154,13 +163,13 @@ const Profile = () => {
     if (!user) return;
     setSavingSon(true);
     try {
-      // Remove old name, add new name
       await updateDoc(doc(db, 'users', user.id), {
         sons: arrayRemove(oldName),
       });
       await updateDoc(doc(db, 'users', user.id), {
         sons: arrayUnion(editingSonName.trim()),
       });
+      setLocalSons(prev => prev.map((s, i) => (i === editingSonIndex ? editingSonName.trim() : s)));
       setEditingSonIndex(null);
       setEditingSonName('');
     } catch (error) {
@@ -229,7 +238,7 @@ const Profile = () => {
                 await handleSaveTeamName();
                 setEditingTeamName(false);
               }}
-              disabled={savingTeamName || teamName.trim() === (user.teamName || '')}
+              disabled={savingTeamName || teamName.trim() === localTeamName}
             >
               Save
             </Button>
@@ -237,7 +246,7 @@ const Profile = () => {
         ) : (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Typography variant="body1" sx={{ flex: 1 }}>
-              {user.teamName ? user.teamName : <span style={{ color: '#888' }}>No team name set</span>}
+              {localTeamName ? localTeamName : <span style={{ color: '#888' }}>No team name set</span>}
             </Typography>
             <Button
               variant="outlined"
@@ -272,7 +281,7 @@ const Profile = () => {
             </Button>
             <Button
               variant="text"
-              onClick={() => { setEditingGrandpa(false); setGrandpa(user.grandpa || ''); }}
+              onClick={() => { setEditingGrandpa(false); setGrandpa(localGrandpa || ''); }}
             >
               Cancel
             </Button>
@@ -281,7 +290,7 @@ const Profile = () => {
           <List>
             <ListItem>
               <ListItemText
-                primary={user.grandpa ? user.grandpa : <span style={{ color: '#888' }}>No grandpa set</span>}
+                primary={localGrandpa ? localGrandpa : <span style={{ color: '#888' }}>No grandpa set</span>}
               />
               <ListItemSecondaryAction>
                 <IconButton
@@ -291,7 +300,7 @@ const Profile = () => {
                 >
                   <EditIcon />
                 </IconButton>
-                {user.grandpa && (
+                {localGrandpa && (
                   <IconButton
                     edge="end"
                     aria-label="delete"
@@ -311,7 +320,7 @@ const Profile = () => {
         My Sons
       </Typography>
       <List>
-        {user.sons.map((son, idx) => (
+        {localSons.map((son, idx) => (
           <ListItem key={son}>
             {editingSonIndex === idx ? (
               <>
