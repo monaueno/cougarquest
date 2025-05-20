@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Avatar,
@@ -24,6 +24,8 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../services/firebase';
+import ReactCrop, { type Crop as CropType } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -44,6 +46,14 @@ const Profile = () => {
   const [localSons, setLocalSons] = useState<string[]>(user?.sons || []);
   const [localGrandpa, setLocalGrandpa] = useState<string>(user?.grandpa || '');
   const [localTeamName, setLocalTeamName] = useState<string>(user?.teamName || '');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState<CropType>({ unit: '%', width: 50, height: 50, x: 25, y: 25 });
+  const [croppedImage, setCroppedImage] = useState<Blob | null>(null);
+  const [showCropDialog, setShowCropDialog] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const [completedCrop, setCompletedCrop] = useState<CropType | null>(null);
+  const [localPhotoURL, setLocalPhotoURL] = useState<string | null>(user?.photoURL || null);
 
   useEffect(() => {
     setTeamName(user?.teamName || '');
@@ -51,7 +61,16 @@ const Profile = () => {
     setGrandpa(user?.grandpa || '');
     setLocalGrandpa(user?.grandpa || '');
     setLocalSons(user?.sons || []);
-  }, [user?.teamName, user?.grandpa, user?.sons]);
+    setLocalPhotoURL(user?.photoURL || null);
+  }, [user?.teamName, user?.grandpa, user?.sons, user?.photoURL]);
+
+  useEffect(() => {
+    if (!completedCrop || !imgRef.current || !completedCrop.width || !completedCrop.height) {
+      setCroppedImage(null);
+      return;
+    }
+    getCroppedImg(imgRef.current, completedCrop, 'cropped.jpeg').then(setCroppedImage);
+  }, [completedCrop, imageUrl]);
 
   const handleAddSon = async () => {
     if (!user || !newSonName.trim()) return;
@@ -136,19 +155,95 @@ const Profile = () => {
     }
   };
 
-  const handleProfilePicChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!user || !e.target.files || !e.target.files[0]) return;
+  const onSelectProfilePic = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    setSelectedFile(file);
+    setImageUrl(URL.createObjectURL(file));
+    setShowCropDialog(true);
+  };
+
+  const onImageLoaded = (img: HTMLImageElement) => {
+    imgRef.current = img;
+    // Set default crop and completedCrop if not already set
+    if (img.width && img.height && (!crop.width || !crop.height)) {
+      const size = Math.min(img.width, img.height);
+      const x = (img.width - size) / 2;
+      const y = (img.height - size) / 2;
+      const defaultCrop = {
+        unit: 'px' as const,
+        width: size,
+        height: size,
+        x,
+        y,
+      };
+      setCrop(defaultCrop);
+      setCompletedCrop(defaultCrop);
+      // Immediately generate cropped image for preview
+      getCroppedImg(img, defaultCrop, 'cropped.jpeg').then(setCroppedImage);
+    }
+  };
+
+  const onCropComplete = async (crop: CropType) => {
+    if (imgRef.current && crop.width && crop.height) {
+      const cropped = await getCroppedImg(imgRef.current, crop, 'cropped.jpeg');
+      setCroppedImage(cropped);
+    }
+  };
+
+  async function getCroppedImg(image: HTMLImageElement, crop: CropType, fileName: string): Promise<Blob> {
+    const canvas = document.createElement('canvas');
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    canvas.width = crop.width as number;
+    canvas.height = crop.height as number;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No 2d context');
+    ctx.drawImage(
+      image,
+      (crop.x as number) * scaleX,
+      (crop.y as number) * scaleY,
+      (crop.width as number) * scaleX,
+      (crop.height as number) * scaleY,
+      0,
+      0,
+      crop.width as number,
+      crop.height as number
+    );
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Canvas is empty'));
+        }
+      }, 'image/jpeg');
+    });
+  }
+
+  const handleUploadCroppedPhoto = async () => {
+    if (!user || !croppedImage) return;
     setUploadingPhoto(true);
+    const prevPhotoURL = localPhotoURL;
+    // Optimistically update local photo
+    const previewUrl = URL.createObjectURL(croppedImage);
+    setLocalPhotoURL(previewUrl);
     try {
-      const file = e.target.files[0];
       const fileRef = storageRef(storage, `profilePictures/${user.id}`);
-      await uploadBytes(fileRef, file);
+      await uploadBytes(fileRef, croppedImage);
       const url = await getDownloadURL(fileRef);
       await updateDoc(doc(db, 'users', user.id), {
         photoURL: url,
       });
+      setShowCropDialog(false);
+      setSelectedFile(null);
+      setImageUrl(null);
+      setCroppedImage(null);
     } catch (error) {
-      console.error('Error uploading profile picture:', error);
+      // Revert to previous photo on error
+      setLocalPhotoURL(prevPhotoURL);
+      console.error('Error uploading cropped profile picture:', error);
+      alert('Failed to update profile picture. Please try again.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -190,7 +285,7 @@ const Profile = () => {
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
         <Avatar
-          src={user.photoURL || undefined}
+          src={localPhotoURL || undefined}
           sx={{ width: 100, height: 100, mb: 2 }}
         >
           {user.displayName?.charAt(0)}
@@ -207,7 +302,7 @@ const Profile = () => {
             type="file"
             accept="image/*"
             hidden
-            onChange={handleProfilePicChange}
+            onChange={onSelectProfilePic}
           />
         </Button>
         <Typography variant="h5" gutterBottom>
@@ -408,6 +503,49 @@ const Profile = () => {
           <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
           <Button onClick={handleAddSon} variant="contained">
             Add
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Crop Dialog */}
+      <Dialog open={showCropDialog} onClose={() => setShowCropDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Crop Profile Picture</DialogTitle>
+        <DialogContent>
+          {imageUrl && (
+            <>
+              <div style={{ position: 'relative', width: '100%', maxWidth: 350, aspectRatio: '1 / 1', margin: '0 auto' }}>
+                <ReactCrop
+                  crop={crop}
+                  onChange={c => setCrop(c)}
+                  onComplete={c => setCompletedCrop(c)}
+                  aspect={1}
+                >
+                  <img src={imageUrl} ref={imgRef} onLoad={e => onImageLoaded(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: 'cover', aspectRatio: '1 / 1' }} />
+                </ReactCrop>
+              </div>
+              {/* Circular cropped preview */}
+              {croppedImage && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                  <img
+                    src={URL.createObjectURL(croppedImage)}
+                    alt="Cropped Preview"
+                    style={{
+                      width: 100,
+                      height: 100,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '2px solid #1976d2',
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowCropDialog(false)}>Cancel</Button>
+          <Button onClick={handleUploadCroppedPhoto} variant="contained" disabled={!croppedImage || uploadingPhoto}>
+            {uploadingPhoto ? 'Uploading...' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
