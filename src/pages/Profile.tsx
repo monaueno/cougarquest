@@ -35,7 +35,6 @@ const Profile = () => {
   const [teamName, setTeamName] = useState(user?.teamName || '');
   const [savingTeamName, setSavingTeamName] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
-  const [savingPoints, setSavingPoints] = useState(false);
   const [grandpa, setGrandpa] = useState(user?.grandpa || '');
   const [editingGrandpa, setEditingGrandpa] = useState(false);
   const [savingGrandpa, setSavingGrandpa] = useState(false);
@@ -46,7 +45,6 @@ const Profile = () => {
   const [localSons, setLocalSons] = useState<string[]>(user?.sons || []);
   const [localGrandpa, setLocalGrandpa] = useState<string>(user?.grandpa || '');
   const [localTeamName, setLocalTeamName] = useState<string>(user?.teamName || '');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [crop, setCrop] = useState<CropType>({ unit: '%', width: 50, height: 50, x: 25, y: 25 });
   const [croppedImage, setCroppedImage] = useState<Blob | null>(null);
   const [showCropDialog, setShowCropDialog] = useState(false);
@@ -69,7 +67,7 @@ const Profile = () => {
       setCroppedImage(null);
       return;
     }
-    getCroppedImg(imgRef.current, completedCrop, 'cropped.jpeg').then(setCroppedImage);
+    getCroppedImg(imgRef.current, completedCrop).then(setCroppedImage);
   }, [completedCrop, imageUrl]);
 
   const handleAddSon = async () => {
@@ -158,7 +156,6 @@ const Profile = () => {
   const onSelectProfilePic = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     const file = e.target.files[0];
-    setSelectedFile(file);
     setImageUrl(URL.createObjectURL(file));
     setShowCropDialog(true);
   };
@@ -180,18 +177,11 @@ const Profile = () => {
       setCrop(defaultCrop);
       setCompletedCrop(defaultCrop);
       // Immediately generate cropped image for preview
-      getCroppedImg(img, defaultCrop, 'cropped.jpeg').then(setCroppedImage);
+      getCroppedImg(img, defaultCrop).then(setCroppedImage);
     }
   };
 
-  const onCropComplete = async (crop: CropType) => {
-    if (imgRef.current && crop.width && crop.height) {
-      const cropped = await getCroppedImg(imgRef.current, crop, 'cropped.jpeg');
-      setCroppedImage(cropped);
-    }
-  };
-
-  async function getCroppedImg(image: HTMLImageElement, crop: CropType, fileName: string): Promise<Blob> {
+  async function getCroppedImg(image: HTMLImageElement, crop: CropType): Promise<Blob> {
     const canvas = document.createElement('canvas');
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
@@ -236,7 +226,6 @@ const Profile = () => {
         photoURL: url,
       });
       setShowCropDialog(false);
-      setSelectedFile(null);
       setImageUrl(null);
       setCroppedImage(null);
     } catch (error) {

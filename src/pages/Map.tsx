@@ -103,7 +103,7 @@ const Map = () => {
 
     // Only show markers for quests the user has not completed
     quests
-      .filter(quest => !quest.completedBy?.includes(user?.id))
+      .filter(quest => user?.id ? !quest.completedBy?.includes(user.id) : true)
       .forEach(quest => {
         let lat: number | undefined;
         let lng: number | undefined;

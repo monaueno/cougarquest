@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, setDoc, doc as firestoreDoc } from 'firebase/firestore';
+import { collection, getDocs, query, doc, updateDoc, deleteDoc, addDoc, setDoc, doc as firestoreDoc } from 'firebase/firestore';
 import { ref, listAll, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import type { Quest } from '../types';
 import { useAuth } from '../context/AuthContext';
-import ReactCrop, { type Crop as CropType } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { 
   Box, 
@@ -12,7 +11,6 @@ import {
   Tabs, 
   Tab, 
   Card, 
-  CardContent, 
   Button, 
   CircularProgress,
   Modal,
@@ -23,7 +21,6 @@ import {
   DialogContent,
   DialogActions,
   Fab,
-  Grid,
   CardMedia
 } from '@mui/material';
 import { Directions, Close, Edit, Delete, Add, Image, CheckCircle } from '@mui/icons-material';
@@ -191,7 +188,7 @@ const Quests = () => {
     // eslint-disable-next-line
   }, [selectedQuest, user]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
@@ -478,8 +475,6 @@ const Quests = () => {
         <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={3} maxWidth="800px" margin="0 auto">
           {(tabValue === 0 ? availableQuests : completedQuests).map((quest) => {
             console.log('Rendering quest:', quest);
-            const lat = quest.location?.coordinates?.latitude ?? parseCoordsFromGoogleMapsLink(quest.googleMapsLink)?.latitude;
-            const lng = quest.location?.coordinates?.longitude ?? parseCoordsFromGoogleMapsLink(quest.googleMapsLink)?.longitude;
             return (
               <Box key={quest.id}>
                 <Card 
