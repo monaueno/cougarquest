@@ -14,7 +14,6 @@ declare global {
 }
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-alert('Debug: Checking API Key - ' + (GOOGLE_MAPS_API_KEY ? 'Key exists' : 'No key found'));
 
 const Map = () => {
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -24,9 +23,6 @@ const Map = () => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<google.maps.Map | null>(null);
   const { user } = useAuth();
-
-  // Add a basic console log that should definitely show up
-  console.log('Map component mounted');
 
   // Get user's location
   useEffect(() => {
@@ -69,27 +65,13 @@ const Map = () => {
 
   // Load Google Maps
   useEffect(() => {
-    alert('Debug: Map useEffect triggered');
-    if (loading) {
-      alert('Debug: Still loading');
-      return;
-    }
-    if (!mapRef.current) {
-      alert('Debug: No map ref');
-      return;
-    }
-    if (!user) {
-      alert('Debug: No user');
-      return;
-    }
+    if (loading || !mapRef.current || !user) return;
 
     let scriptLoadAttempts = 0;
     const maxAttempts = 3;
 
     const loadGoogleMapsScript = () => {
-      alert('Debug: Loading Google Maps script - Attempt ' + (scriptLoadAttempts + 1));
       if (scriptLoadAttempts >= maxAttempts) {
-        alert('Debug: Failed to load after ' + maxAttempts + ' attempts');
         setError('Failed to load Google Maps after multiple attempts. Please refresh the page.');
         return;
       }
@@ -105,19 +87,15 @@ const Map = () => {
       script.async = true;
       script.defer = true;
       
-      // Define the callback function
       window.initMap = () => {
-        alert('Debug: Google Maps script loaded successfully');
         try {
           initializeMap();
         } catch (error) {
-          alert('Debug: Error in initMap callback - ' + error);
           setError('Failed to initialize map. Please refresh the page.');
         }
       };
 
-      script.onerror = (error) => {
-        alert('Debug: Error loading script - ' + error);
+      script.onerror = () => {
         scriptLoadAttempts++;
         setTimeout(loadGoogleMapsScript, 1000);
       };
@@ -125,15 +103,12 @@ const Map = () => {
       document.head.appendChild(script);
     };
 
-    // Load Google Maps script if not already loaded
     if (!window.google?.maps) {
       loadGoogleMapsScript();
     } else {
-      alert('Debug: Google Maps already loaded');
       try {
         initializeMap();
       } catch (error) {
-        alert('Debug: Error initializing map - ' + error);
         setError('Failed to initialize map. Please refresh the page.');
       }
     }
@@ -148,24 +123,12 @@ const Map = () => {
   }, [loading, quests, user, userLocation]);
 
   const initializeMap = () => {
-    alert('Debug: Starting map initialization');
-    
-    if (!mapRef.current) {
-      alert('Debug: Map container not found');
-      console.error('Map container not found');
-      return;
-    }
-
-    if (!window.google?.maps) {
-      alert('Debug: Google Maps not loaded');
-      console.error('Google Maps not loaded');
-      setError('Google Maps failed to load. Please refresh the page.');
+    if (!mapRef.current || !window.google?.maps) {
+      setError('Failed to initialize map. Please refresh the page.');
       return;
     }
 
     try {
-      alert('Debug: Creating map instance');
-      console.log('Initializing map with center:', userLocation || { lat: 40.2518, lng: -111.6493 });
       const defaultCenter = userLocation || { lat: 40.2518, lng: -111.6493 };
       
       // Clear any existing map instance
@@ -201,8 +164,6 @@ const Map = () => {
           position: window.google.maps.ControlPosition.RIGHT_CENTER
         }
       });
-
-      alert('Debug: Map instance created');
 
       // Add user location marker (blue dot)
       if (userLocation) {
@@ -265,11 +226,7 @@ const Map = () => {
             infoWindow.open(mapInstance.current!, marker);
           });
         });
-
-      alert('Debug: Map initialization complete');
     } catch (error) {
-      alert('Debug: Error in map initialization - ' + error);
-      console.error('Error initializing map:', error);
       setError('Failed to initialize map. Please refresh the page.');
     }
   };
