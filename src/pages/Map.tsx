@@ -6,8 +6,15 @@ import type { Quest } from '../types';
 import { parseCoordsFromGoogleMapsLink } from '../utils/parseCoords';
 import { useAuth } from '../context/AuthContext';
 
+// Add type declaration for initMap
+declare global {
+  interface Window {
+    initMap?: () => void;
+  }
+}
+
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-console.log('Google Maps API Key loaded:', GOOGLE_MAPS_API_KEY ? 'Yes' : 'No');
+alert('Debug: Checking API Key - ' + (GOOGLE_MAPS_API_KEY ? 'Key exists' : 'No key found'));
 
 const Map = () => {
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -18,8 +25,11 @@ const Map = () => {
   const mapInstance = useRef<google.maps.Map | null>(null);
   const { user } = useAuth();
 
+  // Add a basic console log that should definitely show up
+  console.log('Map component mounted');
+
+  // Get user's location
   useEffect(() => {
-    // Get user's current location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -36,6 +46,7 @@ const Map = () => {
     }
   }, []);
 
+  // Fetch quests
   useEffect(() => {
     const fetchQuests = async () => {
       try {
@@ -56,53 +67,142 @@ const Map = () => {
     fetchQuests();
   }, []);
 
+  // Load Google Maps
   useEffect(() => {
-    if (loading) return;
-    if (!mapRef.current) return;
-    if (!user) return;
+    alert('Debug: Map useEffect triggered');
+    if (loading) {
+      alert('Debug: Still loading');
+      return;
+    }
+    if (!mapRef.current) {
+      alert('Debug: No map ref');
+      return;
+    }
+    if (!user) {
+      alert('Debug: No user');
+      return;
+    }
 
-    // Load Google Maps script if not already loaded
-    if (!window.google) {
-      console.log('Loading Google Maps script...');
+    let scriptLoadAttempts = 0;
+    const maxAttempts = 3;
+
+    const loadGoogleMapsScript = () => {
+      alert('Debug: Loading Google Maps script - Attempt ' + (scriptLoadAttempts + 1));
+      if (scriptLoadAttempts >= maxAttempts) {
+        alert('Debug: Failed to load after ' + maxAttempts + ' attempts');
+        setError('Failed to load Google Maps after multiple attempts. Please refresh the page.');
+        return;
+      }
+
+      // Remove any existing Google Maps script
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=initMap&libraries=places`;
       script.async = true;
       script.defer = true;
-      script.onload = () => {
-        console.log('Google Maps script loaded successfully');
-        initializeMap();
+      
+      // Define the callback function
+      window.initMap = () => {
+        alert('Debug: Google Maps script loaded successfully');
+        try {
+          initializeMap();
+        } catch (error) {
+          alert('Debug: Error in initMap callback - ' + error);
+          setError('Failed to initialize map. Please refresh the page.');
+        }
       };
+
       script.onerror = (error) => {
-        console.error('Error loading Google Maps script:', error);
-        setError('Failed to load Google Maps');
+        alert('Debug: Error loading script - ' + error);
+        scriptLoadAttempts++;
+        setTimeout(loadGoogleMapsScript, 1000);
       };
+
       document.head.appendChild(script);
-      return () => {
-        document.head.removeChild(script);
-      };
+    };
+
+    // Load Google Maps script if not already loaded
+    if (!window.google?.maps) {
+      loadGoogleMapsScript();
     } else {
-      console.log('Google Maps already loaded, initializing map...');
-      initializeMap();
+      alert('Debug: Google Maps already loaded');
+      try {
+        initializeMap();
+      } catch (error) {
+        alert('Debug: Error initializing map - ' + error);
+        setError('Failed to initialize map. Please refresh the page.');
+      }
     }
-    // eslint-disable-next-line
+
+    return () => {
+      const script = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (script) {
+        script.remove();
+      }
+      delete window.initMap;
+    };
   }, [loading, quests, user, userLocation]);
 
   const initializeMap = () => {
+    alert('Debug: Starting map initialization');
+    
     if (!mapRef.current) {
+      alert('Debug: Map container not found');
       console.error('Map container not found');
       return;
     }
 
+    if (!window.google?.maps) {
+      alert('Debug: Google Maps not loaded');
+      console.error('Google Maps not loaded');
+      setError('Google Maps failed to load. Please refresh the page.');
+      return;
+    }
+
     try {
+      alert('Debug: Creating map instance');
       console.log('Initializing map with center:', userLocation || { lat: 40.2518, lng: -111.6493 });
       const defaultCenter = userLocation || { lat: 40.2518, lng: -111.6493 };
-      mapInstance.current = new window.google.maps.Map(mapRef.current, {
+      
+      // Clear any existing map instance
+      if (mapInstance.current) {
+        mapInstance.current = null;
+      }
+
+      // Create the map with explicit dimensions
+      const mapElement = mapRef.current;
+      mapElement.style.height = '100vh';
+      mapElement.style.width = '100vw';
+      mapElement.style.position = 'fixed';
+      mapElement.style.top = '0';
+      mapElement.style.left = '0';
+      mapElement.style.zIndex = '1';
+
+      // Force a resize event after a short delay
+      setTimeout(() => {
+        if (window.google?.maps && mapInstance.current) {
+          window.google.maps.event.trigger(mapInstance.current, 'resize');
+        }
+      }, 100);
+
+      mapInstance.current = new window.google.maps.Map(mapElement, {
         center: defaultCenter,
         zoom: 15,
         mapTypeControl: true,
         streetViewControl: true,
         fullscreenControl: true,
+        gestureHandling: 'greedy',
+        zoomControl: true,
+        zoomControlOptions: {
+          position: window.google.maps.ControlPosition.RIGHT_CENTER
+        }
       });
+
+      alert('Debug: Map instance created');
 
       // Add user location marker (blue dot)
       if (userLocation) {
@@ -143,26 +243,12 @@ const Map = () => {
             return;
           }
 
-          // Classic teardrop pin in BYU royal blue with a white 'Y' positioned higher
-          const pinSvg = `
-            <svg width="32" height="48" viewBox="0 0 32 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M16 2C9.373 2 4 7.373 4 14c0 7.732 8.5 20.5 11.2 24.4a2 2 0 0 0 3.6 0C19.5 34.5 28 21.732 28 14c0-6.627-5.373-12-12-12z" fill="#0062B8"/>
-              <circle cx="16" cy="16" r="8" fill="#0062B8"/>
-              <text x="16" y="15" text-anchor="middle" font-size="14" font-family="Arial Black,Arial,sans-serif" font-weight="bold" fill="#fff" dy="0.35em">Y</text>
-            </svg>
-          `;
-          const icon = {
-            url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(pinSvg),
-            scaledSize: new window.google.maps.Size(32, 48),
-            anchor: new window.google.maps.Point(16, 48),
-          };
-
           const marker = new window.google.maps.Marker({
             position: { lat, lng },
             map: mapInstance.current,
             title: quest.title,
-            icon,
           });
+
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
               <div style="text-align:center;max-width:220px;">
@@ -174,13 +260,17 @@ const Map = () => {
               </div>
             `,
           });
+
           marker.addListener('click', () => {
             infoWindow.open(mapInstance.current!, marker);
           });
         });
+
+      alert('Debug: Map initialization complete');
     } catch (error) {
+      alert('Debug: Error in map initialization - ' + error);
       console.error('Error initializing map:', error);
-      setError('Failed to initialize map');
+      setError('Failed to initialize map. Please refresh the page.');
     }
   };
 
@@ -194,15 +284,42 @@ const Map = () => {
 
   if (error) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <Typography color="error">{error}</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" p={2}>
+        <Typography color="error" align="center" variant="h6">
+          {error}
+          <br/>
+          <br/>
+          API Key Status: {GOOGLE_MAPS_API_KEY ? 'Present' : 'Missing'}
+          <br/>
+          Please check your .env file and refresh the page.
+        </Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ height: '100vh', width: '100%' }}>
-      <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+    <Box sx={{ 
+      height: { xs: 'calc(100vh - 48px)', sm: 'calc(100vh - 56px)' }, 
+      width: '100%', 
+      position: 'relative',
+      zIndex: 0,
+      overflow: 'hidden',
+      backgroundColor: '#f0f0f0'
+    }}>
+      <div 
+        ref={mapRef} 
+        style={{ 
+          height: '100%', 
+          width: '100%', 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          touchAction: 'pan-x pan-y',
+          backgroundColor: '#e0e0e0'
+        }} 
+      />
     </Box>
   );
 };

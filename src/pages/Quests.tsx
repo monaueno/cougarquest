@@ -22,11 +22,10 @@ import {
   DialogActions,
   Fab,
   CardMedia,
-  Tooltip,
   Snackbar,
   Alert
 } from '@mui/material';
-import { Directions, Close, Edit, Delete, Add, Image, CheckCircle, ContentCopy } from '@mui/icons-material';
+import { Directions, Close, Edit, Delete, Add, Image, CheckCircle } from '@mui/icons-material';
 import { getAddressFromCoords } from '../utils/geocode';
 import { parseCoordsFromGoogleMapsLink } from '../utils/parseCoords';
 
@@ -83,7 +82,6 @@ const Quests = () => {
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState<string | null>(null);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
-  const [showCopySnackbar, setShowCopySnackbar] = useState(false);
   const [showQuestPreview, setShowQuestPreview] = useState(false);
   const [showCheckmarkSnackbar, setShowCheckmarkSnackbar] = useState(false);
   const [completedQuestIds, setCompletedQuestIds] = useState<string[]>(user?.completedQuests || []);
@@ -507,12 +505,6 @@ const Quests = () => {
     setIsSelectingImage(false);
   };
 
-  const handleCopyLink = (questId: string) => {
-    const url = `${window.location.origin}/quest/${questId}`;
-    navigator.clipboard.writeText(url);
-    setShowCopySnackbar(true);
-  };
-
   if (!user) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -582,33 +574,6 @@ const Quests = () => {
                         {quest.title}
                       </Typography>
                     </Box>
-                  </Box>
-                  <Box 
-                    className="quest-actions"
-                    sx={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      display: 'flex',
-                      gap: 1,
-                      opacity: 0,
-                      transition: 'opacity 0.3s ease-in-out',
-                      bgcolor: 'rgba(255,255,255,0.9)',
-                      borderRadius: 1,
-                      p: 0.5
-                    }}
-                  >
-                    <Tooltip title="Copy Address">
-                      <IconButton 
-                        size="small" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopyLink(quest.id);
-                        }}
-                      >
-                        <ContentCopy fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
                   </Box>
                 </Card>
               </Box>
@@ -1177,16 +1142,6 @@ const Quests = () => {
           </Box>
         </Modal>
       )}
-
-      <Snackbar 
-        open={showCopySnackbar} 
-        autoHideDuration={3000} 
-        onClose={() => setShowCopySnackbar(false)}
-      >
-        <Alert severity="success" onClose={() => setShowCopySnackbar(false)}>
-          Link copied to clipboard!
-        </Alert>
-      </Snackbar>
 
       <Snackbar 
         open={showCheckmarkSnackbar} 
