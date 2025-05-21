@@ -31,7 +31,6 @@ const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [newSonName, setNewSonName] = useState('');
-  const [openDialog, setOpenDialog] = useState(false);
   const [teamName, setTeamName] = useState(user?.teamName || '');
   const [savingTeamName, setSavingTeamName] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
@@ -102,7 +101,6 @@ const Profile = () => {
         sons: arrayUnion(newSonName.trim()),
       });
       setNewSonName('');
-      setOpenDialog(false);
     } catch (error) {
       console.error('Error adding son:', error);
     }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, getDocs, query, doc, updateDoc, deleteDoc, addDoc, setDoc, doc as firestoreDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, doc, updateDoc, deleteDoc, addDoc, getDoc } from 'firebase/firestore';
 import { ref, listAll, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import type { Quest } from '../types';
@@ -97,6 +97,16 @@ const Quests = () => {
 
     const fetchQuests = async () => {
       try {
+        // First, get the user's completed quests
+        const userRef = doc(db, 'users', user.id);
+        const userDoc = await getDoc(userRef);
+        const userData = userDoc.data();
+        const userCompletedQuests = userData?.completedQuests || [];
+        
+        // Set the completed quest IDs from the database
+        setCompletedQuestIds(userCompletedQuests);
+
+        // Then fetch all quests
         const questsRef = collection(db, 'quests');
         const q = query(questsRef);
         const querySnapshot = await getDocs(q);
@@ -111,9 +121,9 @@ const Quests = () => {
 
         setAllQuests(quests);
         
-        // Update quest lists based on current completedQuestIds
-        const available = quests.filter(quest => !completedQuestIds.includes(quest.id));
-        const completed = quests.filter(quest => completedQuestIds.includes(quest.id));
+        // Filter quests based on user's completed quests
+        const available = quests.filter(quest => !userCompletedQuests.includes(quest.id));
+        const completed = quests.filter(quest => userCompletedQuests.includes(quest.id));
         
         setAvailableQuests(available);
         setCompletedQuests(completed);
@@ -125,7 +135,7 @@ const Quests = () => {
     };
 
     fetchQuests();
-  }, [user, completedQuestIds]);
+  }, [user]);
 
   // Autofill address for new quest when coordinates change
   useEffect(() => {
@@ -267,7 +277,7 @@ const Quests = () => {
       const hoursSinceCreation = (completionTime.getTime() - questCreationTime.getTime()) / (1000 * 60 * 60);
       const points = hoursSinceCreation <= 12 ? 10 : 5;
 
-      // Update user's completedQuests and points
+      // Update user's completedQuests and points in Firestore
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, {
         points: (user.points || 0) + points,
