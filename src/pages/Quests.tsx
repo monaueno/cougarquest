@@ -103,6 +103,12 @@ const Quests = () => {
         const userData = userDoc.data();
         const userCompletedQuests = userData?.completedQuests || [];
         
+        console.log('Fetched user data:', {
+          userId: user.id,
+          completedQuests: userCompletedQuests,
+          userData
+        });
+        
         // Set the completed quest IDs from the database
         setCompletedQuestIds(userCompletedQuests);
 
@@ -119,11 +125,21 @@ const Quests = () => {
           } as Quest;
         });
 
+        console.log('Fetched all quests:', {
+          totalQuests: quests.length,
+          completedQuests: userCompletedQuests.length
+        });
+
         setAllQuests(quests);
         
         // Filter quests based on user's completed quests
         const available = quests.filter(quest => !userCompletedQuests.includes(quest.id));
         const completed = quests.filter(quest => userCompletedQuests.includes(quest.id));
+        
+        console.log('Filtered quests:', {
+          available: available.length,
+          completed: completed.length
+        });
         
         setAvailableQuests(available);
         setCompletedQuests(completed);
@@ -224,15 +240,36 @@ const Quests = () => {
     const file = event.target.files?.[0];
     console.log('File selected:', file);
     if (!file) return;
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
+
+    // Ensure the file is an image
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Create a copy of the file to prevent cancellation issues
+    const fileCopy = new File([file], file.name, { type: file.type });
+    setSelectedFile(fileCopy);
+    setPreviewUrl(URL.createObjectURL(fileCopy));
     setShowPreviewDialog(true);
   };
 
   const handleSubmitPhoto = async () => {
-    if (!selectedFile || !completingQuestId || !user) return;
+    if (!selectedFile || !completingQuestId || !user) {
+      console.error('Missing required data:', { selectedFile, completingQuestId, user });
+      return;
+    }
     const quest = allQuests.find(q => q.id === completingQuestId);
-    if (!quest) return;
+    if (!quest) {
+      console.error('Quest not found:', completingQuestId);
+      return;
+    }
+
+    console.log('Starting quest completion process:', {
+      completingQuestId,
+      currentCompletedQuests: completedQuestIds,
+      user: user.id
+    });
 
     // First, update the completedQuestIds
     const updatedCompletedQuestIds = [...completedQuestIds, completingQuestId];
@@ -258,24 +295,41 @@ const Quests = () => {
     setIsUploading(true);
 
     try {
-      // Upload to Firebase Storage with metadata
-      const storagePath = `${user.id}/${completingQuestId}.jpg`;
+      // Create a unique filename with timestamp to prevent conflicts
+      const timestamp = new Date().getTime();
+      const storagePath = `${user.id}/${completingQuestId}_${timestamp}.jpg`;
       const storageRef = ref(storage, storagePath);
+      
+      // Convert the file to a blob if it isn't already
+      const blob = selectedFile instanceof Blob ? selectedFile : new Blob([selectedFile], { type: 'image/jpeg' });
+      
+      // Upload with metadata
       const metadata = {
+        contentType: 'image/jpeg',
         customMetadata: {
           submittedAt: new Date().toISOString(),
           questId: completingQuestId,
           userId: user.id
         }
       };
-      await uploadBytes(storageRef, selectedFile, metadata);
-      const downloadURL = await getDownloadURL(storageRef);
+
+      console.log('Starting file upload...');
+      const uploadResult = await uploadBytes(storageRef, blob, metadata);
+      console.log('Upload completed:', uploadResult);
+
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+      console.log('Got download URL:', downloadURL);
 
       // Calculate points based on completion time
       const questCreationTime = new Date(quest.createdAt);
       const completionTime = new Date();
       const hoursSinceCreation = (completionTime.getTime() - questCreationTime.getTime()) / (1000 * 60 * 60);
       const points = hoursSinceCreation <= 12 ? 10 : 5;
+
+      console.log('Updating user document with:', {
+        points,
+        completedQuests: updatedCompletedQuestIds
+      });
 
       // Update user's completedQuests and points in Firestore
       const userRef = doc(db, 'users', user.id);
@@ -284,6 +338,8 @@ const Quests = () => {
         completedQuests: updatedCompletedQuestIds
       });
 
+      console.log('User document updated successfully');
+
       // Update local state with real photo URL and timestamp
       setSubmittedPhotoUrl(downloadURL);
       setSubmittedAt(completionTime.toISOString());
@@ -291,6 +347,7 @@ const Quests = () => {
       setSelectedFile(null);
       setPreviewUrl(null);
     } catch (error) {
+      console.error('Error in quest completion:', error);
       // Revert all state changes on error
       setCompletedQuestIds(completedQuestIds.filter(id => id !== completingQuestId));
       setAvailableQuests(allQuests.filter(q => !completedQuestIds.includes(q.id)));
