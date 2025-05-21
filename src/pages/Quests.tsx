@@ -90,26 +90,17 @@ const Quests = () => {
   const [allQuests, setAllQuests] = useState<Quest[]>([]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    // Sync local completedQuestIds with user.completedQuests
-    setCompletedQuestIds(user?.completedQuests || []);
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     const fetchQuests = async () => {
-      if (!user?.id) {
-        if (isMounted) {
-          setLoading(false);
-        }
-        return;
-      }
-
       try {
         const questsRef = collection(db, 'quests');
         const q = query(questsRef);
         const querySnapshot = await getDocs(q);
         
-        if (!isMounted) return;
-
         const quests = querySnapshot.docs.map(doc => {
           const data = doc.data();
           return { 
@@ -118,29 +109,22 @@ const Quests = () => {
           } as Quest;
         });
 
-        // Use local completedQuestIds to filter
+        setAllQuests(quests);
+        
+        // Update quest lists based on current completedQuestIds
         const available = quests.filter(quest => !completedQuestIds.includes(quest.id));
         const completed = quests.filter(quest => completedQuestIds.includes(quest.id));
-
-        if (isMounted) {
-          setAllQuests(quests);
-          setAvailableQuests(available);
-          setCompletedQuests(completed);
-          setLoading(false);
-        }
+        
+        setAvailableQuests(available);
+        setCompletedQuests(completed);
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching quests:', error);
-        if (isMounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     fetchQuests();
-
-    return () => {
-      isMounted = false;
-    };
   }, [user, completedQuestIds]);
 
   // Autofill address for new quest when coordinates change
@@ -237,27 +221,44 @@ const Quests = () => {
 
   const handleSubmitPhoto = async () => {
     if (!selectedFile || !completingQuestId || !user) return;
-    const quest = availableQuests.find(q => q.id === completingQuestId);
-    if (!quest) return; // Ensure quest is always defined
-    setIsUploading(true);
-    setShowPreviewDialog(false);
+    const quest = allQuests.find(q => q.id === completingQuestId);
+    if (!quest) return;
 
-    // Optimistic UI update
-    const optimisticPhotoUrl = previewUrl;
-    const optimisticTimestamp = new Date().toISOString();
-    setAvailableQuests(prev => prev.filter(q => q.id !== completingQuestId));
-    setCompletedQuests(prev => [...prev, quest]);
-    setCompletedQuestIds(prev => [...prev, completingQuestId]);
+    // First, update the completedQuestIds
+    const updatedCompletedQuestIds = [...completedQuestIds, completingQuestId];
+    setCompletedQuestIds(updatedCompletedQuestIds);
+
+    // Then immediately update both quest lists
+    const updatedAvailableQuests = allQuests.filter(q => !updatedCompletedQuestIds.includes(q.id));
+    const updatedCompletedQuests = allQuests.filter(q => updatedCompletedQuestIds.includes(q.id));
+
+    // Force immediate state updates
+    setAvailableQuests(updatedAvailableQuests);
+    setCompletedQuests(updatedCompletedQuests);
+
+    // Update other UI states
     setSelectedQuest(prev => prev && prev.id === completingQuestId ? quest : prev);
-    setSubmittedPhotoUrl(optimisticPhotoUrl);
-    setSubmittedAt(optimisticTimestamp);
+    setSubmittedPhotoUrl(previewUrl);
+    setSubmittedAt(new Date().toISOString());
     setShowCheckmarkSnackbar(true);
+    setShowPreviewDialog(false);
+    setTabValue(1);
+
+    // Start the upload process
+    setIsUploading(true);
 
     try {
-      // Upload to Firebase Storage
+      // Upload to Firebase Storage with metadata
       const storagePath = `${user.id}/${completingQuestId}.jpg`;
       const storageRef = ref(storage, storagePath);
-      await uploadBytes(storageRef, selectedFile);
+      const metadata = {
+        customMetadata: {
+          submittedAt: new Date().toISOString(),
+          questId: completingQuestId,
+          userId: user.id
+        }
+      };
+      await uploadBytes(storageRef, selectedFile, metadata);
       const downloadURL = await getDownloadURL(storageRef);
 
       // Calculate points based on completion time
@@ -266,21 +267,11 @@ const Quests = () => {
       const hoursSinceCreation = (completionTime.getTime() - questCreationTime.getTime()) / (1000 * 60 * 60);
       const points = hoursSinceCreation <= 12 ? 10 : 5;
 
-      // Save submission in Firestore
-      const submissionDocId = `${user.id}_${completingQuestId}`;
-      await setDoc(doc(db, 'questSubmissions', submissionDocId), {
-        userId: user.id,
-        questId: completingQuestId,
-        photoURL: downloadURL,
-        submittedAt: completionTime.toISOString(),
-        points: points
-      });
-
       // Update user's completedQuests and points
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, {
         points: (user.points || 0) + points,
-        completedQuests: [...(user.completedQuests || []), completingQuestId]
+        completedQuests: updatedCompletedQuestIds
       });
 
       // Update local state with real photo URL and timestamp
@@ -290,10 +281,10 @@ const Quests = () => {
       setSelectedFile(null);
       setPreviewUrl(null);
     } catch (error) {
-      // Revert optimistic UI on error
-      setAvailableQuests(prev => [...prev, quest]);
-      setCompletedQuests(prev => prev.filter(q => q.id !== completingQuestId));
-      setCompletedQuestIds(prev => prev.filter(id => id !== completingQuestId));
+      // Revert all state changes on error
+      setCompletedQuestIds(completedQuestIds.filter(id => id !== completingQuestId));
+      setAvailableQuests(allQuests.filter(q => !completedQuestIds.includes(q.id)));
+      setCompletedQuests(allQuests.filter(q => completedQuestIds.includes(q.id)));
       setSelectedQuest(prev => prev && prev.id === completingQuestId ? quest : prev);
       setSubmittedPhotoUrl(null);
       setSubmittedAt(null);
@@ -562,7 +553,7 @@ const Quests = () => {
       {user?.isAdmin && (
         <Fab
           color="primary"
-          sx={{ position: 'fixed', bottom: 80, right: 16 }}
+          sx={{ position: 'fixed', bottom: 24, right: 24 }}
           onClick={() => setIsCreatingQuest(true)}
         >
           <Add />
@@ -1089,7 +1080,16 @@ const Quests = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelPreview}>Cancel</Button>
-          <Button onClick={handleSubmitPhoto} variant="contained" color="primary">Submit</Button>
+          <Button 
+            onClick={() => {
+              console.log('Submit button clicked');
+              handleSubmitPhoto();
+            }} 
+            variant="contained" 
+            color="primary"
+          >
+            Submit
+          </Button>
         </DialogActions>
       </Dialog>
 

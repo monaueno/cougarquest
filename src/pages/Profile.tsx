@@ -92,10 +92,15 @@ const Profile = () => {
   const handleAddSon = async () => {
     if (!user || !newSonName.trim()) return;
     try {
+      // Check if son already exists
+      if (localSons.includes(newSonName.trim())) {
+        alert('This son is already in your list');
+        return;
+      }
+      
       await updateDoc(doc(db, 'users', user.id), {
         sons: arrayUnion(newSonName.trim()),
       });
-      setLocalSons(prev => [...prev, newSonName.trim()]);
       setNewSonName('');
       setOpenDialog(false);
     } catch (error) {
@@ -419,71 +424,83 @@ const Profile = () => {
         )}
       </Box>
 
-      <Typography variant="h6" gutterBottom>
-        My Sons
-      </Typography>
-      <List>
-        {localSons.map((son, idx) => (
-          <ListItem key={son}>
-            {editingSonIndex === idx ? (
-              <>
-                <TextField
-                  value={editingSonName}
-                  onChange={e => setEditingSonName(e.target.value)}
-                  size="small"
-                  sx={{ mr: 1 }}
-                />
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={() => handleSaveSon(son)}
-                  disabled={savingSon || !editingSonName.trim() || editingSonName.trim() === son}
-                  sx={{ mr: 1 }}
-                >
-                  Save
-                </Button>
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={handleCancelEditSon}
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <>
-                <ListItemText primary={son} />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    aria-label="edit"
-                    onClick={() => handleEditSon(idx, son)}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          My Sons
+        </Typography>
+        <List>
+          {localSons.map((son, idx) => (
+            <ListItem key={son}>
+              {editingSonIndex === idx ? (
+                <>
+                  <TextField
+                    value={editingSonName}
+                    onChange={e => setEditingSonName(e.target.value)}
+                    size="small"
+                    sx={{ mr: 1 }}
+                  />
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => handleSaveSon(son)}
+                    disabled={savingSon || !editingSonName.trim() || editingSonName.trim() === son}
+                    sx={{ mr: 1 }}
                   >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    edge="end"
-                    aria-label="delete"
-                    onClick={() => handleRemoveSon(son)}
+                    Save
+                  </Button>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={handleCancelEditSon}
                   >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </>
-            )}
-          </ListItem>
-        ))}
-      </List>
-
-      <Button
-        variant="contained"
-        color="primary"
-        fullWidth
-        sx={{ mt: 2 }}
-        onClick={() => setOpenDialog(true)}
-      >
-        Add Son
-      </Button>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <ListItemText primary={son} />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      aria-label="edit"
+                      onClick={() => handleEditSon(idx, son)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={() => handleRemoveSon(son)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </>
+              )}
+            </ListItem>
+          ))}
+        </List>
+        
+        {editingSonIndex === null && (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 2 }}>
+            <TextField
+              label="Son's Name"
+              value={newSonName}
+              onChange={(e) => setNewSonName(e.target.value)}
+              fullWidth
+              size="small"
+              placeholder="Enter son's name"
+            />
+            <Button
+              variant="contained"
+              onClick={handleAddSon}
+              disabled={!newSonName.trim()}
+            >
+              Add
+            </Button>
+          </Box>
+        )}
+      </Box>
 
       <Button
         variant="outlined"
@@ -494,26 +511,6 @@ const Profile = () => {
       >
         Sign Out
       </Button>
-
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-        <DialogTitle>Add Son</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Son's Name"
-            fullWidth
-            value={newSonName}
-            onChange={(e) => setNewSonName(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleAddSon} variant="contained">
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Crop Dialog */}
       <Dialog open={showCropDialog} onClose={() => setShowCropDialog(false)} maxWidth="xs" fullWidth>
