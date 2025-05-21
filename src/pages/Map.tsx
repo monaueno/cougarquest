@@ -6,7 +6,7 @@ import type { Quest } from '../types';
 import { parseCoordsFromGoogleMapsLink } from '../utils/parseCoords';
 import { useAuth } from '../context/AuthContext';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyDkKwVbdR2ysG2g4SVSFL1T-I1VGt7zV1o';
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const Map = () => {
   const [quests, setQuests] = useState<Quest[]>([]);

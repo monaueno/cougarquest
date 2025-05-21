@@ -21,9 +21,12 @@ import {
   DialogContent,
   DialogActions,
   Fab,
-  CardMedia
+  CardMedia,
+  Tooltip,
+  Snackbar,
+  Alert
 } from '@mui/material';
-import { Directions, Close, Edit, Delete, Add, Image, CheckCircle } from '@mui/icons-material';
+import { Directions, Close, Edit, Delete, Add, Image, CheckCircle, ContentCopy } from '@mui/icons-material';
 import { getAddressFromCoords } from '../utils/geocode';
 import { parseCoordsFromGoogleMapsLink } from '../utils/parseCoords';
 
@@ -79,6 +82,9 @@ const Quests = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [submittedPhotoUrl, setSubmittedPhotoUrl] = useState<string | null>(null);
+  const [showCopySnackbar, setShowCopySnackbar] = useState(false);
+  const [showQuestPreview, setShowQuestPreview] = useState(false);
+  const [showCheckmarkSnackbar, setShowCheckmarkSnackbar] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -102,13 +108,14 @@ const Quests = () => {
           const data = doc.data();
           return { 
             id: doc.id, 
-            ...data,
-            completedBy: data.completedBy || []
+            ...data
           } as Quest;
         });
 
-        const available = quests.filter(quest => !quest.completedBy.includes(user.id));
-        const completed = quests.filter(quest => quest.completedBy.includes(user.id));
+        // Use user's completedQuests to filter
+        const completedQuestIds = user.completedQuests || [];
+        const available = quests.filter(quest => !completedQuestIds.includes(quest.id));
+        const completed = quests.filter(quest => completedQuestIds.includes(quest.id));
 
         if (isMounted) {
           setAvailableQuests(available);
@@ -217,10 +224,17 @@ const Quests = () => {
   };
 
   const handleSubmitPhoto = async () => {
-    console.log('Submitting photo:', selectedFile, 'for questId:', completingQuestId);
     if (!selectedFile || !completingQuestId || !user) return;
     setIsUploading(true);
     setShowPreviewDialog(false);
+    // Optimistic UI: move quest to completed immediately
+    const quest = availableQuests.find(q => q.id === completingQuestId);
+    if (quest) {
+      setAvailableQuests(prev => prev.filter(q => q.id !== completingQuestId));
+      setCompletedQuests(prev => [...prev, quest]);
+      setSelectedQuest(prev => prev && prev.id === completingQuestId ? quest : prev);
+      setShowCheckmarkSnackbar(true);
+    }
     try {
       // Upload to Firebase Storage
       const storagePath = `${user.id}/${completingQuestId}.jpg`;
@@ -228,8 +242,6 @@ const Quests = () => {
       await uploadBytes(storageRef, selectedFile);
       const downloadURL = await getDownloadURL(storageRef);
 
-      // Get the quest to get its points value and creation time
-      const quest = availableQuests.find(q => q.id === completingQuestId);
       if (!quest) throw new Error('Quest not found');
 
       // Calculate points based on completion time
@@ -247,13 +259,7 @@ const Quests = () => {
         points: points
       });
 
-      // Mark quest as completed for the user
-      const questRef = doc(db, 'quests', completingQuestId);
-      await updateDoc(questRef, {
-        completedBy: [...(quest.completedBy || []), user.id]
-      });
-
-      // Update user's points
+      // Only update user's completedQuests and points
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, {
         points: (user.points || 0) + points,
@@ -261,18 +267,10 @@ const Quests = () => {
       });
 
       // Update local state
-      setAvailableQuests(prev => prev.filter(q => q.id !== completingQuestId));
-      setCompletedQuests(prev => [
-        ...prev,
-        quest
-      ]);
-      // Update selectedQuest if it's the one just completed
+      setCompletedQuests(prev => prev.filter(q => q.id !== completingQuestId));
       setSelectedQuest(prev => {
         if (prev && prev.id === completingQuestId) {
-          return {
-            ...prev,
-            completedBy: [...(prev.completedBy || []), user.id]
-          };
+          return quest;
         }
         return prev;
       });
@@ -291,7 +289,12 @@ const Quests = () => {
         }
       }
     } catch (error) {
-      console.error('Error uploading photo and completing quest:', error);
+      // Revert optimistic UI on error
+      if (quest) {
+        setAvailableQuests(prev => [...prev, quest]);
+        setCompletedQuests(prev => prev.filter(q => q.id !== completingQuestId));
+        setSelectedQuest(prev => prev && prev.id === completingQuestId ? quest : prev);
+      }
       alert('Failed to complete quest. Please try again.');
     } finally {
       setIsUploading(false);
@@ -446,6 +449,12 @@ const Quests = () => {
     setIsSelectingImage(false);
   };
 
+  const handleCopyLink = (questId: string) => {
+    const url = `${window.location.origin}/quest/${questId}`;
+    navigator.clipboard.writeText(url);
+    setShowCopySnackbar(true);
+  };
+
   if (!user) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -484,9 +493,13 @@ const Quests = () => {
                     cursor: 'pointer',
                     position: 'relative',
                     overflow: 'hidden',
+                    transition: 'all 0.3s ease-in-out',
                     '&:hover': {
                       transform: 'scale(1.02)',
-                      transition: 'transform 0.2s ease-in-out'
+                      boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
+                      '& .quest-actions': {
+                        opacity: 1,
+                      }
                     }
                   }}
                 >
@@ -511,6 +524,33 @@ const Quests = () => {
                         {quest.title}
                       </Typography>
                     </Box>
+                  </Box>
+                  <Box 
+                    className="quest-actions"
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      display: 'flex',
+                      gap: 1,
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease-in-out',
+                      bgcolor: 'rgba(255,255,255,0.9)',
+                      borderRadius: 1,
+                      p: 0.5
+                    }}
+                  >
+                    <Tooltip title="Copy Address">
+                      <IconButton 
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyLink(quest.id);
+                        }}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </Card>
               </Box>
@@ -654,6 +694,9 @@ const Quests = () => {
                       >
                         Resubmit Photo
                       </Button>
+                      <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+                        Warning: If you resubmit a photo, your new submission time will be used to determine points awarded for this quest.
+                      </Typography>
                     </>
                   ) : (
                     <Button
@@ -667,8 +710,11 @@ const Quests = () => {
                   )}
                 </Box>
                 {selectedQuest && selectedQuest.completedBy.includes(user.id) && submittedPhotoUrl && (
-                  <Box sx={{ width: '100%', mt: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
+                  <Box sx={{ width: '100%', mt: 2, mb: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                     <img src={submittedPhotoUrl} alt="Submitted" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Submitted on {new Date(selectedQuest.completedAt || '').toLocaleString()}
+                    </Typography>
                   </Box>
                 )}
               </Box>
@@ -974,12 +1020,63 @@ const Quests = () => {
         <DialogActions>
           <Button onClick={() => setIsCreatingQuest(false)}>Cancel</Button>
           <Button 
+            onClick={() => setShowQuestPreview(true)}
+            variant="outlined"
+            disabled={!newQuest.title || !newQuest.description || !newQuest.photoURL}
+          >
+            Preview
+          </Button>
+          <Button 
             onClick={handleCreateQuest}
             variant="contained"
             disabled={!newQuest.title || !newQuest.description || !newQuest.photoURL}
           >
             Create Quest
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={showQuestPreview} onClose={() => setShowQuestPreview(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Quest Preview</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 2 }}>
+            {newQuest.photoURL && (
+              <Box sx={{ width: '100%', height: 200, position: 'relative', mb: 2 }}>
+                <img 
+                  src={newQuest.photoURL} 
+                  alt="Quest preview" 
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover',
+                    borderRadius: 8
+                  }} 
+                />
+              </Box>
+            )}
+            <Typography variant="h5" gutterBottom>{newQuest.title}</Typography>
+            <Typography color="textSecondary" paragraph>{newQuest.description}</Typography>
+            <Typography variant="subtitle1" color="primary" gutterBottom>
+              {newQuest.location.address || 'No address available'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Points: {newQuest.points}
+            </Typography>
+            {newQuest.googleMapsLink && (
+              <Button
+                variant="outlined"
+                href={newQuest.googleMapsLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ mt: 2 }}
+              >
+                View on Google Maps
+              </Button>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowQuestPreview(false)} variant="contained">Close Preview</Button>
         </DialogActions>
       </Dialog>
 
@@ -1015,6 +1112,27 @@ const Quests = () => {
           </Box>
         </Modal>
       )}
+
+      <Snackbar 
+        open={showCopySnackbar} 
+        autoHideDuration={3000} 
+        onClose={() => setShowCopySnackbar(false)}
+      >
+        <Alert severity="success" onClose={() => setShowCopySnackbar(false)}>
+          Link copied to clipboard!
+        </Alert>
+      </Snackbar>
+
+      <Snackbar 
+        open={showCheckmarkSnackbar} 
+        autoHideDuration={2000} 
+        onClose={() => setShowCheckmarkSnackbar(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="success" icon={<CheckCircle fontSize="inherit" />} sx={{ fontSize: 18 }}>
+          Quest completed!
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

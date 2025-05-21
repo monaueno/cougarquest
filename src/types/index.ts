@@ -15,6 +15,7 @@ export interface Quest {
   googleMapsLink: string;
   mapsLink?: string; // Keep the old field as optional for backward compatibility
   createdAt: string; // ISO string timestamp
+  completedAt?: string; // ISO string timestamp for when the quest was completed
 }
 
 export interface User {

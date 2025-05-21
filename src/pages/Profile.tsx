@@ -19,7 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useAuth } from '../context/AuthContext';
 import { auth, db } from '../services/firebase';
-import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -69,6 +69,25 @@ const Profile = () => {
     }
     getCroppedImg(imgRef.current, completedCrop).then(setCroppedImage);
   }, [completedCrop, imageUrl]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const userRef = doc(db, 'users', user.id);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setLocalTeamName(data.teamName || '');
+        setTeamName(data.teamName || '');
+        setLocalGrandpa(data.grandpa || '');
+        setGrandpa(data.grandpa || '');
+        setLocalSons(Array.isArray(data.sons) ? data.sons : []);
+        setLocalPhotoURL(data.photoURL || null);
+        // Optionally update points in the user object if you want to show real-time points
+        user.points = data.points || 0;
+      }
+    });
+    return () => unsubscribe();
+  }, [user?.id]);
 
   const handleAddSon = async () => {
     if (!user || !newSonName.trim()) return;
