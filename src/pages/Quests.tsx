@@ -674,7 +674,7 @@ const Quests = () => {
                   >
                     Get Directions
                   </Button>
-                  {selectedQuest && selectedQuest.completedBy.includes(user.id) ? (
+                  {selectedQuest && (selectedQuest.completedBy?.includes(user.id) ? (
                     <>
                       <Button
                         variant="contained"
@@ -707,9 +707,9 @@ const Quests = () => {
                     >
                       Complete Quest
                     </Button>
-                  )}
+                  ))}
                 </Box>
-                {selectedQuest && selectedQuest.completedBy.includes(user.id) && submittedPhotoUrl && (
+                {selectedQuest && selectedQuest.completedBy?.includes(user.id) && submittedPhotoUrl && (
                   <Box sx={{ width: '100%', mt: 2, mb: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                     <img src={submittedPhotoUrl} alt="Submitted" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8 }} />
                     <Typography variant="body2" color="text.secondary">
