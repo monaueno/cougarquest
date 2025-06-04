@@ -24,10 +24,18 @@ const Login = () => {
 
   const handleGoogleSignIn = async () => {
     try {
+      console.log('Starting Google sign-in process...');
+      console.log('Auth state:', auth);
+      console.log('Google provider:', googleProvider);
+      
       const result = await signInWithPopup(auth, googleProvider);
+      console.log('Sign-in successful, result:', result);
+      
       const user = result.user;
+      console.log('User data:', user);
       
       // Create or update user document
+      console.log('Creating/updating user document...');
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
         name: user.displayName || user.phoneNumber || 'Anonymous User',
@@ -38,10 +46,16 @@ const Login = () => {
         sons: [],
         completedQuests: [],
       }, { merge: true });
+      console.log('User document updated successfully');
 
       navigate('/');
-    } catch (error) {
-      console.error('Error signing in with Google:', error);
+    } catch (error: any) {
+      console.error('Detailed error signing in with Google:', {
+        code: error.code,
+        message: error.message,
+        fullError: error
+      });
+      alert(`Error signing in: ${error.message}`);
     }
   };
 
@@ -50,8 +64,9 @@ const Login = () => {
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber);
       setVerificationId(confirmationResult.verificationId);
       setShowVerificationInput(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending verification code:', error);
+      alert(`Error sending verification code: ${error.message}`);
     }
   };
 
@@ -74,8 +89,9 @@ const Login = () => {
       }, { merge: true });
 
       navigate('/');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error verifying code:', error);
+      alert(`Error verifying code: ${error.message}`);
     }
   };
 

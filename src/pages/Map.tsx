@@ -103,15 +103,8 @@ const Map = () => {
       document.head.appendChild(script);
     };
 
-    if (!window.google?.maps) {
-      loadGoogleMapsScript();
-    } else {
-      try {
-        initializeMap();
-      } catch (error) {
-        setError('Failed to initialize map. Please refresh the page.');
-      }
-    }
+    // Always reload the script when navigating to the map
+    loadGoogleMapsScript();
 
     return () => {
       const script = document.querySelector('script[src*="maps.googleapis.com"]');
@@ -145,13 +138,7 @@ const Map = () => {
       mapElement.style.left = '0';
       mapElement.style.zIndex = '1';
 
-      // Force a resize event after a short delay
-      setTimeout(() => {
-        if (window.google?.maps && mapInstance.current) {
-          window.google.maps.event.trigger(mapInstance.current, 'resize');
-        }
-      }, 100);
-
+      // Create the map instance
       mapInstance.current = new window.google.maps.Map(mapElement, {
         center: defaultCenter,
         zoom: 15,
@@ -226,6 +213,14 @@ const Map = () => {
             infoWindow.open(mapInstance.current!, marker);
           });
         });
+
+      // Force a resize event after a short delay
+      setTimeout(() => {
+        if (window.google?.maps && mapInstance.current) {
+          window.google.maps.event.trigger(mapInstance.current, 'resize');
+          mapInstance.current.setCenter(defaultCenter);
+        }
+      }, 100);
     } catch (error) {
       setError('Failed to initialize map. Please refresh the page.');
     }
